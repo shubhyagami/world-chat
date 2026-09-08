@@ -1,0 +1,11 @@
+com\earthchat\service\UserManager.class
+com\earthchat\controller\GlobeController.class
+com\earthchat\listener\WebSocketEventListener.class
+com\earthchat\model\SignalMessage.class
+com\earthchat\WebChatApplication.class
+com\earthchat\model\ConnectionLink.class
+com\earthchat\model\User.class
+com\earthchat\model\ChatMessage.class
+com\earthchat\controller\ChatWebSocketController.class
+com\earthchat\config\WebSocketConfig.class
+com\earthchat\model\LocationUpdate.class
