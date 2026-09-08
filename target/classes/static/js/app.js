@@ -172,21 +172,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     onLoveEvent: (loveData) => {
       // Incoming Cupid Love Arrow broadcast from any user across the globe
       if (!loveData) return;
-      const maleUser = {
-        id: loveData.maleUserId,
-        name: loveData.maleUserName || 'Male Orbiter',
-        lat: loveData.maleLat,
-        lng: loveData.maleLng,
-        gender: 'MALE'
+      const sender = {
+        id: loveData.senderId || (loveData.senderGender === 'FEMALE' ? loveData.femaleUserId : loveData.maleUserId),
+        name: loveData.senderName || (loveData.senderGender === 'FEMALE' ? loveData.femaleUserName : loveData.maleUserName) || 'Sender',
+        lat: loveData.senderLat ?? (loveData.senderGender === 'FEMALE' ? loveData.femaleLat : loveData.maleLat),
+        lng: loveData.senderLng ?? (loveData.senderGender === 'FEMALE' ? loveData.femaleLng : loveData.maleLng),
+        gender: loveData.senderGender || (loveData.femaleUserId === loveData.senderId ? 'FEMALE' : 'MALE')
       };
-      const femaleUser = {
-        id: loveData.femaleUserId,
-        name: loveData.femaleUserName || 'Female Orbiter',
-        lat: loveData.femaleLat,
-        lng: loveData.femaleLng,
-        gender: 'FEMALE'
+      const target = {
+        id: loveData.targetId || (loveData.senderGender === 'FEMALE' ? loveData.maleUserId : loveData.femaleUserId),
+        name: loveData.targetName || (loveData.senderGender === 'FEMALE' ? loveData.maleUserName : loveData.femaleUserName) || 'Target',
+        lat: loveData.targetLat ?? (loveData.senderGender === 'FEMALE' ? loveData.maleLat : loveData.femaleLat),
+        lng: loveData.targetLng ?? (loveData.senderGender === 'FEMALE' ? loveData.maleLng : loveData.femaleLng),
+        gender: loveData.targetGender || (sender.gender === 'FEMALE' ? 'MALE' : 'FEMALE')
       };
-      globeManager.triggerLoveAnimation(maleUser, femaleUser);
+      globeManager.triggerLoveAnimation(sender, target);
     },
     onChatMessage: (msg) => {
       chatManager.handleIncomingMessage(msg);
@@ -313,52 +313,51 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Connect STOMP WebSocket
   wsClient.connect(currentUser.id, currentUser);
 
-  // 10. Execute Cupid Love Arrow Interaction (Male to Female)
+  // 10. Execute Cupid Love Arrow Interaction (Female to Male or Male to Female)
   function executeLoveInteraction(userA, userB) {
     if (!userA || !userB) return;
 
     const uAGender = (userA.gender || 'MALE').toUpperCase();
     const uBGender = (userB.gender || 'MALE').toUpperCase();
 
-    // Condition Check: Only Male <-> Female pair allows Cupid Love Arrow & Blushing Mermaid
+    // Condition Check: Only Female <-> Male pair allows Cupid Love Arrow
     const isMaleFemale =
       (uAGender === 'MALE' && uBGender === 'FEMALE') ||
       (uAGender === 'FEMALE' && uBGender === 'MALE');
 
     if (!isMaleFemale) {
-      // "apart from this condition male-male or female to female dont dont any thing"
       window.showToast('ℹ️ Love Arrow is exclusive to Male & Female interactions.');
       return;
     }
 
-    const maleUser = uAGender === 'MALE' ? userA : userB;
-    const femaleUser = uAGender === 'FEMALE' ? userA : userB;
-
-    // Smoothly fly camera midway between male and female so user sees the flight
-    const midLat = (maleUser.lat + femaleUser.lat) / 2;
-    const midLng = (maleUser.lng + femaleUser.lng) / 2;
-    globeManager.focusUser({ lat: midLat, lng: midLng }, 3.5);
-
-    // Trigger local animation immediately
-    globeManager.triggerLoveAnimation(maleUser, femaleUser);
+    // Direction: userA is the SENDER, userB is the TARGET/RECEIVER!
+    // Trigger local animation immediately (arrow flies from userA to userB in fixed camera view)
+    globeManager.triggerLoveAnimation(userA, userB);
 
     // Broadcast Cupid event to all clients globally via Spring Boot
     wsClient.shootLove({
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderGender: currentUser.gender,
-      targetId: userB.id === currentUser.id ? userA.id : userB.id,
-      maleUserId: maleUser.id,
-      maleUserName: maleUser.name,
-      maleLat: maleUser.lat,
-      maleLng: maleUser.lng,
-      femaleUserId: femaleUser.id,
-      femaleUserName: femaleUser.name,
-      femaleLat: femaleUser.lat,
-      femaleLng: femaleUser.lng
+      senderId: userA.id,
+      senderName: userA.name,
+      senderGender: uAGender,
+      senderLat: userA.lat,
+      senderLng: userA.lng,
+      targetId: userB.id,
+      targetName: userB.name,
+      targetGender: uBGender,
+      targetLat: userB.lat,
+      targetLng: userB.lng,
+      // Backwards compatibility fields
+      maleUserId: uAGender === 'MALE' ? userA.id : userB.id,
+      maleUserName: uAGender === 'MALE' ? userA.name : userB.name,
+      maleLat: uAGender === 'MALE' ? userA.lat : userB.lat,
+      maleLng: uAGender === 'MALE' ? userA.lng : userB.lng,
+      femaleUserId: uAGender === 'FEMALE' ? userA.id : userB.id,
+      femaleUserName: uAGender === 'FEMALE' ? userA.name : userB.name,
+      femaleLat: uAGender === 'FEMALE' ? userA.lat : userB.lat,
+      femaleLng: uAGender === 'FEMALE' ? userA.lng : userB.lng
     });
 
-    window.showToast(`💘 Cupid summoned! Sending love arrow from ${maleUser.name} to ${femaleUser.name}! 🧜‍♀️`);
+    window.showToast(`💘 Love arrow sent from ${userA.name} to ${userB.name}!`);
   }
 
   // 11. Floating Target User Action Modal (when clicking user pin on globe)
@@ -398,9 +397,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (targetModalLoveBtn) {
         if (isMaleFemale) {
           targetModalLoveBtn.style.display = 'inline-flex';
-          targetModalLoveBtn.title = curGender === 'MALE'
-            ? `Shoot Cupid's Love Arrow to ${user.name}`
-            : `Send Cupid's Love Arrow from ${user.name}`;
+          targetModalLoveBtn.title = `Shoot Love Arrow to ${user.name}`;
         } else {
           // Male-Male or Female-Female: hide Love Arrow button completely
           targetModalLoveBtn.style.display = 'none';

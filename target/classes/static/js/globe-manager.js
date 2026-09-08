@@ -807,48 +807,65 @@ class GlobeManager {
     if (this.playedLoveLinks.has(link.id)) return;
     this.playedLoveLinks.add(link.id);
 
-    const maleId = link.maleUserId || (link.user1Gender === 'MALE' ? link.user1Id : link.user2Id);
-    const femaleId = link.femaleUserId || (link.user1Gender === 'FEMALE' ? link.user1Id : link.user2Id);
-
-    const maleUser = (this.users || []).find(u => u.id === maleId) || {
-      id: maleId,
-      name: link.user1Id === maleId ? link.user1Name : link.user2Name,
-      lat: link.maleLat || (link.user1Id === maleId ? link.user1Lat : link.user2Lat),
-      lng: link.maleLng || (link.user1Id === maleId ? link.user1Lng : link.user2Lng),
-      gender: 'MALE'
+    const user1 = (this.users || []).find(u => u.id === link.user1Id) || {
+      id: link.user1Id,
+      name: link.user1Name,
+      lat: link.user1Lat,
+      lng: link.user1Lng,
+      gender: link.user1Gender || 'MALE'
     };
 
-    const femaleUser = (this.users || []).find(u => u.id === femaleId) || {
-      id: femaleId,
-      name: link.user1Id === femaleId ? link.user1Name : link.user2Name,
-      lat: link.femaleLat || (link.user1Id === femaleId ? link.user1Lat : link.user2Lat),
-      lng: link.femaleLng || (link.user1Id === femaleId ? link.user1Lng : link.user2Lng),
-      gender: 'FEMALE'
+    const user2 = (this.users || []).find(u => u.id === link.user2Id) || {
+      id: link.user2Id,
+      name: link.user2Name,
+      lat: link.user2Lat,
+      lng: link.user2Lng,
+      gender: link.user2Gender || 'FEMALE'
     };
 
-    this.triggerLoveAnimation(maleUser, femaleUser);
+    const u1Gender = (user1.gender || 'MALE').toUpperCase();
+    const u2Gender = (user2.gender || 'FEMALE').toUpperCase();
+    if ((u1Gender === 'MALE' && u2Gender === 'FEMALE') || (u1Gender === 'FEMALE' && u2Gender === 'MALE')) {
+      this.triggerLoveAnimation(user1, user2);
+    }
   }
 
   /**
    * Dynamic Cupid Love Arrow & Blushing Mermaid Animation
-   * Male -> Cupid flies & shoots Love Arrow -> Arrow travels geodesic arc across globe -> Female -> Mermaid blushes with hearts!
+   * Only allowed between Female and Male (Female -> Male OR Male -> Female)
+   * Female shows Blushing Mermaid after receiving OR sending arrow
+   * Male shows Love Impact (hearts burst), NEVER mermaid
    */
-  triggerLoveAnimation(maleUser, femaleUser) {
-    if (!this.map || !maleUser || !femaleUser) return;
+  triggerLoveAnimation(senderUser, targetUser) {
+    if (!this.map || !senderUser || !targetUser) return;
 
-    let maleLng = maleUser.lng;
-    while (maleLng < -180) maleLng += 360;
-    while (maleLng > 180) maleLng -= 360;
+    const senderGender = (senderUser.gender || 'MALE').toUpperCase();
+    const targetGender = (targetUser.gender || 'FEMALE').toUpperCase();
 
-    let femaleLng = femaleUser.lng;
-    while (femaleLng < -180) femaleLng += 360;
-    while (femaleLng > 180) femaleLng -= 360;
+    // Condition Check: Only Female-Male or Male-Female allowed
+    const isMaleToFemale = senderGender === 'MALE' && targetGender === 'FEMALE';
+    const isFemaleToMale = senderGender === 'FEMALE' && targetGender === 'MALE';
+    if (!isMaleToFemale && !isFemaleToMale) {
+      console.warn('Love interaction ignored: only allowed between female and male');
+      return;
+    }
 
-    // 1. Calculate Geodesic Flight Path
-    let arcPoints = [[maleLng, maleUser.lat], [femaleLng, femaleUser.lat]];
+    // Fixed camera perspective: Ensure the globe does not auto-spin while Cupid shoots
+    this.stopAutoSpin();
+
+    let fromLng = senderUser.lng;
+    while (fromLng < -180) fromLng += 360;
+    while (fromLng > 180) fromLng -= 360;
+
+    let toLng = targetUser.lng;
+    while (toLng < -180) toLng += 360;
+    while (toLng > 180) toLng -= 360;
+
+    // 1. Calculate Geodesic Flight Path from Sender to Target
+    let arcPoints = [[fromLng, senderUser.lat], [toLng, targetUser.lat]];
     if (window.turf && window.turf.greatCircle) {
       try {
-        const gc = window.turf.greatCircle([maleLng, maleUser.lat], [femaleLng, femaleUser.lat], { npoints: 60 });
+        const gc = window.turf.greatCircle([fromLng, senderUser.lat], [toLng, targetUser.lat], { npoints: 60 });
         if (gc && gc.geometry && gc.geometry.coordinates) {
           arcPoints = gc.geometry.coordinates;
         }
@@ -857,9 +874,9 @@ class GlobeManager {
       }
     }
 
-    // 2. Spawn Animated Cupid Marker at Male Location
+    // 2. Spawn Animated Cupid Marker at Sender Location
     const cupidEl = document.createElement('div');
-    cupidEl.className = 'cosmic-cupid-sprite';
+    cupidEl.className = 'cosmic-cupid-sprite cupid-fly-marker';
     cupidEl.innerHTML = `
       <div class="cupid-inner">
         <div class="cupid-halo"></div>
@@ -872,10 +889,10 @@ class GlobeManager {
       anchor: 'bottom',
       offset: [0, -45]
     })
-    .setLngLat([maleLng, maleUser.lat])
+    .setLngLat([fromLng, senderUser.lat])
     .addTo(this.map);
 
-    // 3. Spawn Animated Love Arrow Marker
+    // 3. Spawn Animated Love Arrow Marker at start of path
     const arrowEl = document.createElement('div');
     arrowEl.className = 'love-arrow-marker';
     arrowEl.innerHTML = `
@@ -897,7 +914,22 @@ class GlobeManager {
     .addTo(this.map);
 
     // Announce banner globally
-    this.showLoveBanner(`💘 ${maleUser.name} shot Cupid's Love Arrow to ${femaleUser.name}! 🧜‍♀️✨`);
+    this.showLoveBanner(`💘 ${senderUser.name} shot Love Arrow to ${targetUser.name}! 🧜‍♀️✨`);
+
+    // "only show mermaid if the user is female after recieving or senind arrow"
+    // If sender is female: show Blushing Mermaid at female sender location after sending arrow!
+    if (senderGender === 'FEMALE') {
+      setTimeout(() => {
+        const inner = cupidEl.querySelector('.cupid-inner');
+        if (inner) {
+          inner.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+          inner.style.opacity = '0';
+          inner.style.transform = 'scale(0.5)';
+        }
+        setTimeout(() => cupidMarker.remove(), 600);
+        this.spawnBlushingMermaid(senderUser);
+      }, 500);
+    }
 
     // 4. Animate Arrow along Geodesic Path
     const totalPoints = arcPoints.length;
@@ -919,31 +951,44 @@ class GlobeManager {
           const nextPoint = arcPoints[currentIndex + 1];
           const p1 = this.map.project(currentPoint);
           const p2 = this.map.project(nextPoint);
-          const angleDeg = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
-          const wrap = arrowEl.querySelector('.love-arrow-wrap');
-          if (wrap) wrap.style.transform = `rotate(${angleDeg}deg)`;
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          if (Math.hypot(dx, dy) > 0.5) {
+            const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+            const wrap = arrowEl.querySelector('.love-arrow-wrap');
+            if (wrap) wrap.style.transform = `rotate(${angleDeg}deg)`;
+          }
         }
       }
 
       if (progress < 1) {
         requestAnimationFrame(animateArrow);
       } else {
-        // Arrow arrived at Female destination!
+        // Arrow arrived at Target destination!
         arrowMarker.remove();
 
-        // Fade Cupid out smoothly
-        setTimeout(() => {
-          const inner = cupidEl.querySelector('.cupid-inner');
-          if (inner) {
-            inner.style.transition = 'opacity 1s ease, transform 1s ease';
-            inner.style.opacity = '0';
-            inner.style.transform = 'scale(0.5)';
-          }
-          setTimeout(() => cupidMarker.remove(), 1000);
-        }, 800);
+        // If Cupid is still at sender (e.g. Male sender), fade out smoothly
+        if (senderGender === 'MALE') {
+          setTimeout(() => {
+            const inner = cupidEl.querySelector('.cupid-inner');
+            if (inner) {
+              inner.style.transition = 'opacity 1s ease, transform 1s ease';
+              inner.style.opacity = '0';
+              inner.style.transform = 'scale(0.5)';
+            }
+            setTimeout(() => cupidMarker.remove(), 1000);
+          }, 800);
+        }
 
-        // 5. Spawn Blushing Mermaid at Female Location!
-        this.spawnBlushingMermaid(femaleUser);
+        // Handle target arrival:
+        // "only show mermaid if the user is female after recieving or senind arrow"
+        if (targetGender === 'FEMALE') {
+          // Female target received arrow -> Blushing Mermaid!
+          this.spawnBlushingMermaid(targetUser);
+        } else {
+          // Male target received arrow -> Love Heart impact (NEVER mermaid)
+          this.spawnMaleLoveImpact(targetUser);
+        }
       }
     };
 
@@ -951,6 +996,44 @@ class GlobeManager {
     setTimeout(() => {
       requestAnimationFrame(animateArrow);
     }, 450);
+  }
+
+  /**
+   * Spawn Love Impact at Male Location with glowing heart burst (NO mermaid)
+   */
+  spawnMaleLoveImpact(maleUser) {
+    if (!this.map || !maleUser) return;
+
+    let maleLng = maleUser.lng;
+    while (maleLng < -180) maleLng += 360;
+    while (maleLng > 180) maleLng -= 360;
+
+    const impactEl = document.createElement('div');
+    impactEl.className = 'male-love-impact-marker';
+    impactEl.innerHTML = `
+      <div class="male-love-inner">
+        <div class="male-love-burst"></div>
+        <div class="male-love-hearts">
+          <span>💖</span>
+          <span>💘</span>
+          <span>✨</span>
+        </div>
+      </div>
+    `;
+
+    const impactMarker = new maplibregl.Marker({
+      element: impactEl,
+      anchor: 'center',
+      offset: [0, -35]
+    })
+    .setLngLat([maleLng, maleUser.lat])
+    .addTo(this.map);
+
+    setTimeout(() => {
+      impactEl.style.transition = 'opacity 0.6s ease';
+      impactEl.style.opacity = '0';
+      setTimeout(() => impactMarker.remove(), 600);
+    }, 2400);
   }
 
   /**
@@ -964,7 +1047,7 @@ class GlobeManager {
     while (femaleLng > 180) femaleLng -= 360;
 
     const mermaidEl = document.createElement('div');
-    mermaidEl.className = 'cosmic-mermaid-sprite';
+    mermaidEl.className = 'cosmic-mermaid-sprite mermaid-blush-marker';
     mermaidEl.innerHTML = `
       <div class="mermaid-inner">
         <img src="/images/mermaid-blush.jpg" alt="Blushing Mermaid">

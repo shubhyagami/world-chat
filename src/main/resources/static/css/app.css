@@ -1541,7 +1541,7 @@ html, body {
   justify-content: center;
   z-index: 2000;
   animation: modalFadeIn 0.35s ease;
-  pointer-events: auto;
+  pointer-events: auto !important;
 }
 
 .identity-setup-card {
@@ -1556,7 +1556,11 @@ html, body {
   flex-direction: column;
   gap: 16px;
   position: relative;
-  pointer-events: auto;
+  pointer-events: auto !important;
+}
+
+.identity-setup-card * {
+  pointer-events: auto !important;
 }
 
 .identity-setup-header {
@@ -1716,6 +1720,7 @@ html, body {
    ========================================================================== */
 
 /* 1. Animated Flying Cupid (at Male location) */
+.cosmic-cupid-sprite,
 .cupid-fly-marker {
   position: absolute !important;
   top: 0 !important;
@@ -1815,6 +1820,7 @@ html, body {
 }
 
 /* 3. Animated Blushing Mermaid (at Female location) */
+.cosmic-mermaid-sprite,
 .mermaid-blush-marker {
   position: absolute !important;
   top: 0 !important;
@@ -1898,7 +1904,56 @@ html, body {
   }
 }
 
-/* 4. Global Love Banner Announcement */
+/* 4. Love Impact on Male User (when receiving arrow from Female, NO mermaid) */
+.male-love-impact-marker {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none;
+  z-index: 1002;
+  animation: none !important;
+}
+
+.male-love-inner {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.male-love-burst {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 0, 127, 0.6) 0%, rgba(255, 215, 0, 0.4) 50%, transparent 80%);
+  animation: loveBurstPulse 1.8s ease-out forwards;
+}
+
+.male-love-hearts {
+  position: absolute;
+  top: -15px;
+  display: flex;
+  gap: 6px;
+  font-size: 22px;
+  animation: maleHeartsFloat 2.2s ease-out forwards;
+}
+
+@keyframes loveBurstPulse {
+  0% { transform: scale(0.3); opacity: 0; }
+  30% { transform: scale(1.2); opacity: 1; filter: drop-shadow(0 0 20px #ff007f); }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes maleHeartsFloat {
+  0% { transform: translateY(0) scale(0.5); opacity: 0; }
+  25% { transform: translateY(-12px) scale(1.2); opacity: 1; }
+  100% { transform: translateY(-45px) scale(0.9); opacity: 0; }
+}
+
+/* 5. Global Love Banner Announcement */
 .love-announcement-banner {
   position: absolute;
   top: 75px;
