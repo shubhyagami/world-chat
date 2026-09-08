@@ -6,7 +6,9 @@
 const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' }
   ]
 };
 
@@ -214,17 +216,29 @@ class WebRTCCallManager {
           this.stopRingtone();
           this.peerNameEl.textContent = this.peerUser.name;
           this.callTimerEl.textContent = 'Connecting...';
-          // Create peer connection & send SDP Offer
-          this.createPeerConnection();
-          const offer = await this.peerConnection.createOffer();
-          await this.peerConnection.setLocalDescription(offer);
 
-          this.wsClient.sendSignal({
-            senderId: this.currentUser.id,
-            targetId: this.peerUser.id,
-            type: 'offer',
-            payload: offer
-          });
+          if (this.peerUser.id && this.peerUser.id.startsWith('user_')) {
+            // Simulated Orbiter transmission
+            this.remoteStream = this.createSyntheticStream(this.peerUser.name, this.peerUser.avatarUrl);
+            this.remoteVideo.srcObject = this.remoteStream;
+            this.remotePlaceholder.style.display = 'none';
+            this.remoteVideo.style.display = 'block';
+            this.callActive = true;
+            this.startCallTimer();
+            window.showToast?.(`Connected to ${this.peerUser.name} via Orbital Mesh!`);
+          } else {
+            // Create peer connection & send SDP Offer to real peer
+            this.createPeerConnection();
+            const offer = await this.peerConnection.createOffer();
+            await this.peerConnection.setLocalDescription(offer);
+
+            this.wsClient.sendSignal({
+              senderId: this.currentUser.id,
+              targetId: this.peerUser.id,
+              type: 'offer',
+              payload: offer
+            });
+          }
         }
         break;
 
@@ -273,18 +287,157 @@ class WebRTCCallManager {
   }
 
   /**
-   * Acquire local camera & microphone stream
+   * Acquire local camera & microphone stream with robust fallback
+   * 1. Try real camera + microphone
+   * 2. If camera unavailable (no hardware or locked by another tab), fallback to audio + synthetic animated canvas
+   * 3. If audio also unavailable, fallback to full synthetic stream (animated avatar + silent audio track)
+   * GUARANTEE: Never throws or aborts the call!
    */
   async getMedia() {
     if (this.localStream) {
       return this.localStream;
     }
-    this.localStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: true
-    });
-    this.localVideo.srcObject = this.localStream;
+
+    let stream = null;
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: true
+        });
+      } catch (err1) {
+        console.warn('Real camera acquisition failed, trying audio-only with synthetic video:', err1);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: true
+          });
+        } catch (err2) {
+          console.warn('Microphone also unavailable or denied, creating complete synthetic stream:', err2);
+        }
+      }
+    }
+
+    if (!stream || stream.getVideoTracks().length === 0) {
+      // Create synthetic animated video stream using canvas
+      const synthetic = this.createSyntheticStream(this.currentUser?.name || 'Orbiter', this.currentUser?.avatarUrl);
+      if (stream && stream.getAudioTracks().length > 0) {
+        // Use real mic audio with synthetic video
+        stream = new MediaStream([synthetic.getVideoTracks()[0], stream.getAudioTracks()[0]]);
+      } else {
+        stream = synthetic;
+      }
+    }
+
+    this.localStream = stream;
+    if (this.localVideo) {
+      this.localVideo.srcObject = this.localStream;
+    }
     return this.localStream;
+  }
+
+  /**
+   * Create an animated Canvas video track and Web Audio tone/silent track
+   */
+  createSyntheticStream(userName, avatarUrl) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+
+    const avatarImg = new Image();
+    avatarImg.crossOrigin = 'anonymous';
+    avatarImg.src = avatarUrl || ('https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(userName));
+
+    let frame = 0;
+    const render = () => {
+      frame++;
+      // Dark futuristic gradient background
+      const grad = ctx.createRadialGradient(320, 240, 40, 320, 240, 340);
+      grad.addColorStop(0, '#0c1a30');
+      grad.addColorStop(1, '#020617');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 640, 480);
+
+      // Radar scanning rings
+      ctx.save();
+      ctx.translate(320, 220);
+      for (let i = 1; i <= 3; i++) {
+        const radius = 80 + ((frame * 1.2 + i * 45) % 130);
+        const alpha = Math.max(0, 1 - radius / 210);
+        ctx.strokeStyle = `rgba(0, 240, 255, ${alpha * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Draw avatar
+      ctx.beginPath();
+      ctx.arc(0, 0, 64, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      try {
+        if (avatarImg.complete && avatarImg.naturalWidth > 0) {
+          ctx.drawImage(avatarImg, -64, -64, 128, 128);
+        } else {
+          ctx.fillStyle = '#00f0ff';
+          ctx.fillRect(-64, -64, 128, 128);
+        }
+      } catch (e) {
+        ctx.fillStyle = '#00f0ff';
+        ctx.fillRect(-64, -64, 128, 128);
+      }
+      ctx.restore();
+
+      // Avatar neon border
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(320, 220, 66, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // HUD text
+      ctx.fillStyle = '#00f0ff';
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`📡 LIVE P2P: ${userName.toUpperCase()}`, 320, 340);
+
+      ctx.fillStyle = '#10b981';
+      ctx.font = '12px monospace';
+      ctx.fillText('● SECURE WEBRTC TRANSMISSION', 320, 365);
+
+      this.syntheticAnimId = requestAnimationFrame(render);
+    };
+    render();
+
+    const videoStream = canvas.captureStream(30);
+    const videoTrack = videoStream.getVideoTracks()[0];
+
+    // Create silent audio track with Web Audio API
+    let audioTrack;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      gain.gain.value = 0.0001; // virtually silent
+      osc.connect(gain);
+      const dest = audioCtx.createMediaStreamDestination();
+      gain.connect(dest);
+      osc.start();
+      audioTrack = dest.stream.getAudioTracks()[0];
+    } catch (e) {
+      console.warn('AudioContext unavailable:', e);
+    }
+
+    const tracks = [videoTrack];
+    if (audioTrack) tracks.push(audioTrack);
+    return new MediaStream(tracks);
   }
 
   /**
@@ -343,6 +496,11 @@ class WebRTCCallManager {
   endCall(notifyPeer = true) {
     this.stopRingtone();
     this.stopCallTimer();
+
+    if (this.syntheticAnimId) {
+      cancelAnimationFrame(this.syntheticAnimId);
+      this.syntheticAnimId = null;
+    }
 
     if (notifyPeer && this.peerUser && this.wsClient) {
       this.wsClient.sendSignal({

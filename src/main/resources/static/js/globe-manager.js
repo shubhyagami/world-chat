@@ -26,6 +26,9 @@ function getUserColor(id) {
 }
 
 function getLinkColor(link) {
+  if (link.isLoveLink || link.loveLink || link.type === 'LOVE') {
+    return '#ff007f';
+  }
   if (link.color && !link.color.startsWith('rgb(0,') && link.color !== '#00f0ff' && link.color !== '#a855f7') {
     return link.color;
   }
@@ -749,23 +752,22 @@ class GlobeManager {
 
     this.links.forEach(link => {
       try {
-        if (link.isLoveLink || link.loveLink) {
-          // Condition: When user is male, send Cupid Love Arrow to female user instead of showing line!
+        if (link.isLoveLink || link.loveLink || link.type === 'LOVE') {
+          // Trigger love animation globally if not already played
           this.triggerLoveAnimationForLink(link);
-          return;
         }
 
         const start = [link.user1Lng, link.user1Lat];
         const end = [link.user2Lng, link.user2Lat];
 
-        const arcColor = getLinkColor(link);
+        const arcColor = (link.isLoveLink || link.loveLink || link.type === 'LOVE') ? '#ff007f' : getLinkColor(link);
         // Generate geodesic Great Circle line with Turf.js
         if (window.turf && window.turf.greatCircle) {
           const arc = window.turf.greatCircle(start, end, {
             npoints: 100,
             properties: {
               color: arcColor,
-              type: link.type
+              type: link.type || (link.isLoveLink ? 'LOVE' : 'CHAT')
             }
           });
           features.push(arc);
@@ -779,7 +781,7 @@ class GlobeManager {
             },
             properties: {
               color: arcColor,
-              type: link.type
+              type: link.type || (link.isLoveLink ? 'LOVE' : 'CHAT')
             }
           });
         }

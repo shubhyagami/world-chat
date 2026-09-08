@@ -61,6 +61,20 @@ public class User {
         this.gender = "MALE";
     }
 
+    public User(String id, String name, Integer age, String gender, double lat, double lng, String city, String country, String avatarUrl) {
+        this.id = id;
+        this.name = name;
+        this.age = age != null ? age : 24;
+        this.gender = gender != null ? gender.toUpperCase() : "MALE";
+        this.lat = lat;
+        this.lng = lng;
+        this.city = city != null ? city : "Unknown";
+        this.country = country != null ? country : "Global";
+        this.avatarUrl = avatarUrl;
+        this.status = "ONLINE";
+        this.lastSeen = System.currentTimeMillis();
+    }
+
     public String getId() {
         return id;
     }

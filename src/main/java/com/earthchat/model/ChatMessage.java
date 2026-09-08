@@ -9,13 +9,16 @@ public class ChatMessage {
     private String senderAvatar;
     private String targetId; // null or "GLOBAL" for broadcast
     private String content;
+    private String mediaUrl; // URL or base64 data for images / meme GIFs
+    private String mediaType; // "IMAGE", "GIF", "EMOJI", "TEXT"
     private long timestamp;
-    private String type; // "CHAT", "GLOBAL", "SYSTEM"
+    private String type; // "CHAT", "GLOBAL", "SYSTEM", "IMAGE", "GIF"
 
     public ChatMessage() {
         this.id = UUID.randomUUID().toString();
         this.timestamp = System.currentTimeMillis();
         this.type = "CHAT";
+        this.mediaType = "TEXT";
     }
 
     public ChatMessage(String senderId, String senderName, String senderAvatar, String targetId, String content, String type) {
@@ -25,6 +28,20 @@ public class ChatMessage {
         this.senderAvatar = senderAvatar;
         this.targetId = targetId;
         this.content = content;
+        this.type = type != null ? type : "CHAT";
+        this.mediaType = "TEXT";
+        this.timestamp = System.currentTimeMillis();
+    }
+
+    public ChatMessage(String senderId, String senderName, String senderAvatar, String targetId, String content, String mediaUrl, String mediaType, String type) {
+        this.id = UUID.randomUUID().toString();
+        this.senderId = senderId;
+        this.senderName = senderName;
+        this.senderAvatar = senderAvatar;
+        this.targetId = targetId;
+        this.content = content;
+        this.mediaUrl = mediaUrl;
+        this.mediaType = mediaType != null ? mediaType : "TEXT";
         this.type = type != null ? type : "CHAT";
         this.timestamp = System.currentTimeMillis();
     }
@@ -75,6 +92,22 @@ public class ChatMessage {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getMediaUrl() {
+        return mediaUrl;
+    }
+
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public String getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(String mediaType) {
+        this.mediaType = mediaType;
     }
 
     public long getTimestamp() {

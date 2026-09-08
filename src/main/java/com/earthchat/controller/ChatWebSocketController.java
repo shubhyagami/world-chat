@@ -93,11 +93,39 @@ public class ChatWebSocketController {
 
     /**
      * Broadcast live Cupid love arrow action between Male and Female users
+     * Creates a public "LOVE" link so the connection line displays on the map publicly for everyone!
      */
     @MessageMapping("/love.shoot")
     public void shootLoveArrow(@Payload java.util.Map<String, Object> event) {
-        // Broadcast love animation trigger to all clients across the world
+        String senderId = (String) event.get("senderId");
+        String targetId = (String) event.get("targetId");
+        String senderName = (String) event.get("senderName");
+        String targetName = (String) event.get("targetName");
+
+        // 1. Create a persistent public "LOVE" ConnectionLink between sender and target
+        if (senderId != null && targetId != null) {
+            ConnectionLink link = userManager.createLink(senderId, targetId, "LOVE");
+            if (link != null) {
+                // Broadcast updated links publicly so the glowing 3D love arc displays on the globe map for all users
+                messagingTemplate.convertAndSend("/topic/links", userManager.getAllLinks());
+            }
+        }
+
+        // 2. Broadcast live Cupid Love Arrow flight animation to all clients globally
         messagingTemplate.convertAndSend("/topic/love-events", event);
+
+        // 3. Post public announcement to global chat room
+        if (senderName != null && targetName != null) {
+            ChatMessage loveChat = new ChatMessage(
+                    senderId != null ? senderId : "SYSTEM",
+                    "OrbitSync",
+                    "",
+                    "GLOBAL",
+                    "💘 " + senderName + " shot Love Arrow to " + targetName + "! 🧜‍♀️✨",
+                    "SYSTEM"
+            );
+            messagingTemplate.convertAndSend("/topic/chat.public", loveChat);
+        }
     }
 
     /**
@@ -120,6 +148,34 @@ public class ChatWebSocketController {
             messagingTemplate.convertAndSend("/topic/user." + message.getTargetId() + ".chat", message);
             // Echo back to sender so their UI updates
             messagingTemplate.convertAndSend("/topic/user." + message.getSenderId() + ".chat", message);
+
+            // Automated reply if chatting with a simulated orbiter
+            if (message.getTargetId().startsWith("user_")) {
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(1000);
+                        User bot = userManager.getUser(message.getTargetId());
+                        String botName = bot != null ? bot.getName() : "Orbiter";
+                        String botAvatar = bot != null ? bot.getAvatarUrl() : "";
+                        String botCity = bot != null && bot.getCity() != null ? bot.getCity() : "Space";
+                        String replyText = "Hello from " + botCity + "! 🛰️ Signal received loud and clear on the 3D Earth mesh.";
+                        if ("IMAGE".equalsIgnoreCase(message.getMediaType())) {
+                            replyText = "🖼️ Visual image transmission successfully received and rendered at " + botCity + " orbital relay! 🛰️✨";
+                        } else if ("GIF".equalsIgnoreCase(message.getMediaType()) || "MEME".equalsIgnoreCase(message.getMediaType())) {
+                            replyText = "🔥 Epic meme received at " + botCity + " orbital station! 10/10 meme transmission! 😂🚀";
+                        }
+                        ChatMessage reply = new ChatMessage(
+                                message.getTargetId(),
+                                botName,
+                                botAvatar,
+                                message.getSenderId(),
+                                replyText,
+                                "TEXT"
+                        );
+                        messagingTemplate.convertAndSend("/topic/user." + message.getSenderId() + ".chat", reply);
+                    } catch (InterruptedException ignored) {}
+                }).start();
+            }
         }
     }
 
@@ -150,6 +206,40 @@ public class ChatWebSocketController {
         // Deliver signal directly to target user
         if (targetId != null && !targetId.isEmpty()) {
             messagingTemplate.convertAndSend("/topic/user." + targetId + ".signal", signal);
+
+            // Automated orbiter response for solo testing
+            if ("call-request".equalsIgnoreCase(type) && targetId.startsWith("user_")) {
+                handleSimulatedOrbiterCall(signal);
+            }
         }
+    }
+
+    private void handleSimulatedOrbiterCall(SignalMessage signal) {
+        String orbiterId = signal.getTargetId();
+        String callerId = signal.getSenderId();
+        User orbiter = userManager.getUser(orbiterId);
+        String orbiterName = orbiter != null ? orbiter.getName() : "Orbiter";
+        String orbiterAvatar = orbiter != null ? orbiter.getAvatarUrl() : "";
+
+        new Thread(() -> {
+            try {
+                Thread.sleep(1200);
+                SignalMessage accept = new SignalMessage();
+                accept.setType("call-accept");
+                accept.setSenderId(orbiterId);
+                accept.setSenderName(orbiterName);
+                accept.setSenderAvatar(orbiterAvatar);
+                accept.setTargetId(callerId);
+
+                // Create VIDEO link so the live line shows on the globe map!
+                ConnectionLink link = userManager.createLink(callerId, orbiterId, "VIDEO");
+                if (link != null) {
+                    messagingTemplate.convertAndSend("/topic/links", userManager.getAllLinks());
+                    messagingTemplate.convertAndSend("/topic/users", userManager.getAllUsers());
+                }
+
+                messagingTemplate.convertAndSend("/topic/user." + callerId + ".signal", accept);
+            } catch (InterruptedException ignored) {}
+        }).start();
     }
 }
