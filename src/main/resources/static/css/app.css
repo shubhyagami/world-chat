@@ -1541,6 +1541,7 @@ html, body {
   justify-content: center;
   z-index: 2000;
   animation: modalFadeIn 0.35s ease;
+  pointer-events: auto;
 }
 
 .identity-setup-card {
@@ -1555,6 +1556,7 @@ html, body {
   flex-direction: column;
   gap: 16px;
   position: relative;
+  pointer-events: auto;
 }
 
 .identity-setup-header {
