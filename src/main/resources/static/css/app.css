@@ -2392,3 +2392,170 @@ html, body {
   100% { opacity: 0; transform: translateX(-50%) translateY(-25px) scale(0.9); }
 }
 
+/* ==========================================================================
+   6. Cosmic Flying Letter / Envelope Animation (Message Sending & Receiving)
+   ========================================================================== */
+.cosmic-letter-flight-marker {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none;
+  z-index: 1005;
+  animation: none !important;
+  transform-origin: center center;
+}
+
+.letter-envelope-wrap {
+  position: relative;
+  width: 58px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 12px #00f0ff) drop-shadow(0 0 20px rgba(0, 240, 255, 0.6));
+}
+
+.letter-glow-halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.5) 0%, rgba(255, 0, 127, 0.3) 50%, transparent 80%);
+  border-radius: 50%;
+  animation: letterGlowPulse 0.8s infinite alternate ease-in-out;
+}
+
+.letter-svg-body {
+  width: 42px;
+  height: 32px;
+  z-index: 2;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+  animation: letterFloatTilt 1.2s infinite ease-in-out;
+}
+
+.letter-wings-left,
+.letter-wings-right {
+  position: absolute;
+  top: 50%;
+  font-size: 20px;
+  z-index: 1;
+  pointer-events: none;
+  line-height: 1;
+}
+
+.letter-wings-left {
+  left: -14px;
+  transform: translateY(-55%) scaleX(-1);
+  animation: wingFlapLeft 0.3s infinite alternate ease-in-out;
+}
+
+.letter-wings-right {
+  right: -14px;
+  transform: translateY(-55%);
+  animation: wingFlapRight 0.3s infinite alternate ease-in-out;
+}
+
+.letter-sparkle-trail {
+  position: absolute;
+  top: 50%;
+  left: -20px;
+  transform: translateY(-50%);
+  font-size: 14px;
+  animation: letterTrailBurst 0.6s infinite linear;
+  pointer-events: none;
+}
+
+@keyframes letterGlowPulse {
+  from { transform: translate(-50%, -50%) scale(0.85); opacity: 0.6; }
+  to { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+}
+
+@keyframes letterFloatTilt {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-5px) rotate(4deg); }
+}
+
+@keyframes wingFlapLeft {
+  from { transform: translateY(-55%) scaleX(-1) rotate(-15deg); }
+  to { transform: translateY(-55%) scaleX(-1) rotate(25deg); }
+}
+
+@keyframes wingFlapRight {
+  from { transform: translateY(-55%) rotate(-15deg); }
+  to { transform: translateY(-55%) rotate(25deg); }
+}
+
+@keyframes letterTrailBurst {
+  0% { opacity: 1; transform: translateY(-50%) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-50%) translateX(-30px) scale(0.3); }
+}
+
+/* Delivered Reaction Popup at Destination */
+.letter-delivered-popup {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none;
+  z-index: 1006;
+  animation: none !important;
+}
+
+.letter-delivered-box {
+  transform: translate(-50%, -100%);
+  background: rgba(10, 20, 40, 0.95);
+  border: 1.5px solid #00f0ff;
+  border-radius: 20px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.6), 0 8px 24px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
+  animation: letterDeliveredPop 2.6s forwards ease-out;
+  white-space: nowrap;
+}
+
+.letter-delivered-box .del-icon {
+  font-size: 18px;
+  animation: delIconHop 0.8s infinite alternate ease-in-out;
+}
+
+.letter-delivered-box .del-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+.letter-delivered-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #00f0ff;
+  border-radius: 50%;
+  animation: deliveryRipple 1.4s infinite ease-out;
+}
+
+@keyframes letterDeliveredPop {
+  0% { opacity: 0; transform: translate(-50%, -80%) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, -110%) scale(1.08); }
+  25% { transform: translate(-50%, -100%) scale(1); }
+  75% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -125%) scale(0.85); }
+}
+
+@keyframes deliveryRipple {
+  0% { width: 15px; height: 15px; opacity: 1; border-color: #00f0ff; }
+  100% { width: 90px; height: 90px; opacity: 0; border-color: #ff007f; }
+}
+
+@keyframes delIconHop {
+  from { transform: scale(1); }
+  to { transform: scale(1.25) rotate(10deg); }
+}
+

@@ -14,6 +14,7 @@ class WebSocketClient {
     this.onChatMessage = options.onChatMessage || (() => {});
     this.onSignalMessage = options.onSignalMessage || (() => {});
     this.onLoveEvent = options.onLoveEvent || (() => {});
+    this.onLetterEvent = options.onLetterEvent || (() => {});
     this.onConnectStatus = options.onConnectStatus || (() => {});
   }
 
@@ -39,7 +40,7 @@ class WebSocketClient {
         }
       });
 
-      // 2. Subscribe to active 3D connection links broadcast
+      // 2. Subscribe to active 3D connection links broadcast (VIDEO calls only)
       this.stompClient.subscribe('/topic/links', (message) => {
         try {
           const links = JSON.parse(message.body);
@@ -49,13 +50,23 @@ class WebSocketClient {
         }
       });
 
-      // 2.5 Subscribe to worldwide Cupid Love Events
+      // 2.5 Subscribe to worldwide Cupid Love Events (Arrows & Sprites)
       this.stompClient.subscribe('/topic/love-events', (message) => {
         try {
           const loveData = JSON.parse(message.body);
           this.onLoveEvent(loveData);
         } catch (e) {
           console.error('Failed to parse love-events payload:', e);
+        }
+      });
+
+      // 2.8 Subscribe to 3D Flying Letter Events between users
+      this.stompClient.subscribe('/topic/letter-events', (message) => {
+        try {
+          const letterData = JSON.parse(message.body);
+          this.onLetterEvent(letterData);
+        } catch (e) {
+          console.error('Failed to parse letter-events payload:', e);
         }
       });
 

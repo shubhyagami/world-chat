@@ -8,7 +8,17 @@ const RTC_CONFIG = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' }
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    // OpenRelay Public TURN Relay for NAT traversal across mobile carriers & firewalls
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
   ]
 };
 
@@ -23,6 +33,7 @@ class WebRTCCallManager {
     this.peerUser = null;
     this.isCaller = false;
     this.callActive = false;
+    this.iceCandidateQueue = [];
 
     this.audioEnabled = true;
     this.videoEnabled = true;
@@ -74,6 +85,43 @@ class WebRTCCallManager {
 
   setWsClient(wsClient) {
     this.wsClient = wsClient;
+  }
+
+  /**
+   * Solo Hardware / Self-Test Loopback mode
+   */
+  async startSelfTest() {
+    if (this.callActive) {
+      this.endCall(false);
+    }
+    this.isCaller = false;
+    this.peerUser = {
+      id: this.currentUser?.id || 'self',
+      name: (this.currentUser?.name || 'Self') + ' (Echo Test)',
+      avatarUrl: this.currentUser?.avatarUrl
+    };
+
+    try {
+      await this.getMedia();
+      this.openModal();
+      this.peerNameEl.textContent = `Echo Loopback Test (${this.currentUser?.name || 'Self'})`;
+      this.callTimerEl.textContent = 'Testing Hardware';
+
+      // Mirror local stream into remote preview
+      this.remoteStream = this.localStream;
+      this.remoteVideo.srcObject = this.remoteStream;
+      this.remoteVideo.muted = true; // Prevent acoustic feedback loop
+      this.remotePlaceholder.style.display = 'none';
+      this.remoteVideo.style.display = 'block';
+      this.remoteVideo.play().catch(() => {});
+
+      this.callActive = true;
+      this.startCallTimer();
+      window.showToast?.('Camera, Mic & Screen Share ready in Self-Test mode!');
+    } catch (err) {
+      console.error('Self-test media error:', err);
+      window.showToast?.('Hardware access error during self-test.');
+    }
   }
 
   /**
@@ -201,6 +249,20 @@ class WebRTCCallManager {
   }
 
   /**
+   * Drain any queued ICE candidates once remoteDescription is set
+   */
+  async drainIceCandidateQueue() {
+    while (this.iceCandidateQueue && this.iceCandidateQueue.length > 0) {
+      const cand = this.iceCandidateQueue.shift();
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.warn('Error adding queued ICE candidate:', e);
+      }
+    }
+  }
+
+  /**
    * Route incoming WebRTC signals
    */
   async handleSignalMessage(signal) {
@@ -217,28 +279,17 @@ class WebRTCCallManager {
           this.peerNameEl.textContent = this.peerUser.name;
           this.callTimerEl.textContent = 'Connecting...';
 
-          if (this.peerUser.id && this.peerUser.id.startsWith('user_')) {
-            // Simulated Orbiter transmission
-            this.remoteStream = this.createSyntheticStream(this.peerUser.name, this.peerUser.avatarUrl);
-            this.remoteVideo.srcObject = this.remoteStream;
-            this.remotePlaceholder.style.display = 'none';
-            this.remoteVideo.style.display = 'block';
-            this.callActive = true;
-            this.startCallTimer();
-            window.showToast?.(`Connected to ${this.peerUser.name} via Orbital Mesh!`);
-          } else {
-            // Create peer connection & send SDP Offer to real peer
-            this.createPeerConnection();
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
+          // Create peer connection & send SDP Offer to peer
+          this.createPeerConnection();
+          const offer = await this.peerConnection.createOffer();
+          await this.peerConnection.setLocalDescription(offer);
 
-            this.wsClient.sendSignal({
-              senderId: this.currentUser.id,
-              targetId: this.peerUser.id,
-              type: 'offer',
-              payload: offer
-            });
-          }
+          this.wsClient.sendSignal({
+            senderId: this.currentUser.id,
+            targetId: this.peerUser.id,
+            type: 'offer',
+            payload: offer
+          });
         }
         break;
 
@@ -249,8 +300,12 @@ class WebRTCCallManager {
         break;
 
       case 'offer':
-        if (this.peerConnection) {
+        if (!this.peerConnection) {
+          this.createPeerConnection();
+        }
+        try {
           await this.peerConnection.setRemoteDescription(new RTCSessionDescription(payload));
+          await this.drainIceCandidateQueue();
           const answer = await this.peerConnection.createAnswer();
           await this.peerConnection.setLocalDescription(answer);
 
@@ -260,21 +315,33 @@ class WebRTCCallManager {
             type: 'answer',
             payload: answer
           });
+        } catch (err) {
+          console.error('Error handling WebRTC offer:', err);
         }
         break;
 
       case 'answer':
         if (this.peerConnection) {
-          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(payload));
+          try {
+            await this.peerConnection.setRemoteDescription(new RTCSessionDescription(payload));
+            await this.drainIceCandidateQueue();
+          } catch (err) {
+            console.error('Error setting remote answer:', err);
+          }
         }
         break;
 
       case 'ice-candidate':
-        if (this.peerConnection && payload) {
-          try {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(payload));
-          } catch (e) {
-            console.error('Error adding ICE candidate:', e);
+        if (payload) {
+          if (this.peerConnection && this.peerConnection.remoteDescription && this.peerConnection.remoteDescription.type) {
+            try {
+              await this.peerConnection.addIceCandidate(new RTCIceCandidate(payload));
+            } catch (e) {
+              console.warn('Error adding direct ICE candidate:', e);
+            }
+          } else {
+            // Buffer candidate until remoteDescription is active
+            this.iceCandidateQueue.push(payload);
           }
         }
         break;
@@ -423,6 +490,9 @@ class WebRTCCallManager {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       gain.gain.value = 0.0001; // virtually silent
@@ -447,6 +517,7 @@ class WebRTCCallManager {
     if (this.peerConnection) {
       this.peerConnection.close();
     }
+    this.iceCandidateQueue = [];
 
     this.peerConnection = new RTCPeerConnection(RTC_CONFIG);
 
@@ -471,10 +542,28 @@ class WebRTCCallManager {
 
     // Remote track arrived
     this.peerConnection.ontrack = (event) => {
-      this.remoteStream = event.streams[0];
+      console.log('Received remote track:', event.track?.kind);
+      if (event.streams && event.streams[0]) {
+        this.remoteStream = event.streams[0];
+      } else {
+        if (!this.remoteStream) {
+          this.remoteStream = new MediaStream();
+        }
+        this.remoteStream.addTrack(event.track);
+      }
+
       this.remoteVideo.srcObject = this.remoteStream;
       this.remotePlaceholder.style.display = 'none';
       this.remoteVideo.style.display = 'block';
+
+      const playPromise = this.remoteVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.warn('Autoplay blocked unmuted video, muting to allow display:', err);
+          this.remoteVideo.muted = true;
+          this.remoteVideo.play();
+        });
+      }
 
       if (!this.callActive) {
         this.callActive = true;
@@ -483,8 +572,13 @@ class WebRTCCallManager {
     };
 
     this.peerConnection.onconnectionstatechange = () => {
-      if (this.peerConnection.connectionState === 'disconnected' ||
-          this.peerConnection.connectionState === 'failed') {
+      const state = this.peerConnection?.connectionState;
+      console.log('WebRTC Connection State:', state);
+      if (state === 'connected') {
+        if (this.callTimerEl && this.callTimerEl.textContent === 'Connecting...') {
+          this.callTimerEl.textContent = '00:00';
+        }
+      } else if (state === 'disconnected' || state === 'failed') {
         this.endCall(false);
       }
     };

@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css">
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" th:href="@{/css/app.css?v=love10}" href="/css/app.css?v=love10">
+  <link rel="stylesheet" th:href="@{/css/app.css?v=letter1}" href="/css/app.css?v=letter1">
 </head>
 <body>
 
@@ -54,9 +54,9 @@
           <div class="stat-indicator live"></div>
           <span>Users: <strong id="count-online-users" class="stat-value" th:text="${totalUsers}">1</strong></span>
         </div>
-        <div class="stat-pill" title="Active 3D Connection Arcs">
+        <div class="stat-pill" title="Live Video Calls on Earth">
           <div class="stat-indicator arcs"></div>
-          <span>Arcs: <strong id="count-active-links" class="stat-value" th:text="${totalLinks}">0</strong></span>
+          <span>Calls: <strong id="count-active-links" class="stat-value" th:text="${totalLinks}">0</strong></span>
         </div>
       </div>
 
@@ -94,13 +94,10 @@
         </button>
         <button class="sidebar-tab" data-tab="tab-links">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="18" cy="5" r="3"></circle>
-            <circle cx="6" cy="12" r="3"></circle>
-            <circle cx="18" cy="19" r="3"></circle>
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
           </svg>
-          3D Arcs
+          Video Calls
         </button>
         <button class="sidebar-tab" data-tab="tab-profile">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -122,9 +119,9 @@
         </div>
       </div>
 
-      <!-- TAB 2: Active 3D Arcs (Links) -->
+      <!-- TAB 2: Active Video Calls (Lines) -->
       <div class="tab-content" id="tab-links">
-        <div class="section-title">Connected Channels Across Earth</div>
+        <div class="section-title">Active Video Calls Across Earth</div>
         <div id="link-list-container" class="link-list">
           <!-- Populated dynamically via app.js -->
         </div>
@@ -552,11 +549,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
 
   <!-- Modular Application Scripts -->
-  <script th:src="@{/js/geo-location.js?v=media1}" src="/js/geo-location.js?v=media1"></script>
-  <script th:src="@{/js/globe-manager.js?v=media1}" src="/js/globe-manager.js?v=media1"></script>
-  <script th:src="@{/js/websocket-client.js?v=media1}" src="/js/websocket-client.js?v=media1"></script>
-  <script th:src="@{/js/chat.js?v=media1}" src="/js/chat.js?v=media1"></script>
-  <script th:src="@{/js/webrtc-call.js?v=media1}" src="/js/webrtc-call.js?v=media1"></script>
-  <script th:src="@{/js/app.js?v=media1}" src="/js/app.js?v=media1"></script>
+  <script th:src="@{/js/geo-location.js?v=call3}" src="/js/geo-location.js?v=call3"></script>
+  <script th:src="@{/js/globe-manager.js?v=call3}" src="/js/globe-manager.js?v=call3"></script>
+  <script th:src="@{/js/websocket-client.js?v=call3}" src="/js/websocket-client.js?v=call3"></script>
+  <script th:src="@{/js/chat.js?v=call3}" src="/js/chat.js?v=call3"></script>
+  <script th:src="@{/js/webrtc-call.js?v=call3}" src="/js/webrtc-call.js?v=call3"></script>
+  <script th:src="@{/js/app.js?v=call3}" src="/js/app.js?v=call3"></script>
 </body>
 </html>

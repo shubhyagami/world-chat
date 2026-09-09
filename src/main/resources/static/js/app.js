@@ -18,18 +18,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 3500);
   };
 
-  // 2. Initialize or restore Current User identity from localStorage
-  let storedId = localStorage.getItem('orbitchat_user_id');
+  // 2. Initialize or restore Current User identity
+  // Use sessionStorage so each browser tab/window is an independent orbiter (for seamless multi-tab testing)
+  let storedId = sessionStorage.getItem('orbitchat_user_id');
   if (!storedId) {
     storedId = 'user_' + Math.random().toString(36).substring(2, 9);
-    localStorage.setItem('orbitchat_user_id', storedId);
+    sessionStorage.setItem('orbitchat_user_id', storedId);
   }
 
   const randomNum = Math.floor(1000 + Math.random() * 9000);
   const defaultNames = ['CosmoPioneer', 'AstroVoyager', 'NovaStargazer', 'SolarDrifter', 'OrbitalNomad', 'CyberAero'];
   const randomDefaultName = defaultNames[Math.floor(Math.random() * defaultNames.length)] + '#' + randomNum;
 
-  let storedName = localStorage.getItem('orbitchat_user_name') || randomDefaultName;
+  // Prefer session-scoped name so multiple tabs don't show identical names
+  let storedName = sessionStorage.getItem('orbitchat_user_name');
+  if (!storedName) {
+    storedName = localStorage.getItem('orbitchat_user_name') || randomDefaultName;
+    sessionStorage.setItem('orbitchat_user_name', storedName);
+  }
+
   let storedAge = parseInt(localStorage.getItem('orbitchat_user_age') || '24', 10);
   let storedGender = localStorage.getItem('orbitchat_user_gender') || 'MALE';
   let storedAvatar = localStorage.getItem('orbitchat_user_avatar') ||
@@ -164,13 +171,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderUsersList();
     },
     onLinksUpdate: (links) => {
-      activeLinksList = links;
-      if (countActiveLinks) countActiveLinks.textContent = links.length;
-      globeManager.updateLinks(links);
+      // ONLY active video calls are maintained as links (no lines for chat or cupid)
+      activeLinksList = (links || []).filter(l => l && l.type === 'VIDEO');
+      if (countActiveLinks) countActiveLinks.textContent = activeLinksList.length;
+      globeManager.updateLinks(activeLinksList);
       renderLinksList();
     },
     onLoveEvent: (loveData) => {
-      // Incoming Cupid Love Arrow broadcast from any user across the globe
+      // Incoming Cupid Love Arrow broadcast from any user across the globe (NO line is drawn)
       if (!loveData) return;
       const sender = {
         id: loveData.senderId || (loveData.senderGender === 'FEMALE' ? loveData.femaleUserId : loveData.maleUserId),
@@ -187,6 +195,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         gender: loveData.targetGender || (sender.gender === 'FEMALE' ? 'MALE' : 'FEMALE')
       };
       globeManager.triggerLoveAnimation(sender, target);
+    },
+    onLetterEvent: (letterData) => {
+      // 3D Flying Letter animation when users send or receive messages
+      if (!letterData || !letterData.senderId || !letterData.targetId) return;
+      const sender = (activeUsersList || []).find(u => u.id === letterData.senderId) ||
+        (currentUser.id === letterData.senderId ? currentUser : null);
+      const target = (activeUsersList || []).find(u => u.id === letterData.targetId) ||
+        (currentUser.id === letterData.targetId ? currentUser : null);
+      if (sender && target) {
+        globeManager.triggerLetterAnimation(sender, target, letterData);
+      }
     },
     onChatMessage: (msg) => {
       chatManager.handleIncomingMessage(msg);
@@ -388,11 +407,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (isMe) {
       targetModalChatBtn.style.display = 'none';
-      targetModalCallBtn.style.display = 'none';
+      if (targetModalCallBtn) {
+        targetModalCallBtn.style.display = 'inline-flex';
+        targetModalCallBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Test Camera & Call
+        `;
+        targetModalCallBtn.title = 'Test your camera, microphone, and call preview';
+      }
       if (targetModalLoveBtn) targetModalLoveBtn.style.display = 'none';
     } else {
       targetModalChatBtn.style.display = 'inline-flex';
-      targetModalCallBtn.style.display = 'inline-flex';
+      if (targetModalCallBtn) {
+        targetModalCallBtn.style.display = 'inline-flex';
+        targetModalCallBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Video Call
+        `;
+        targetModalCallBtn.title = `Start Video Call with ${user.name}`;
+      }
 
       if (targetModalLoveBtn) {
         if (isMaleFemale) {
@@ -436,7 +469,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (targetModalCallBtn) {
     targetModalCallBtn.addEventListener('click', () => {
       if (selectedUserForModal) {
-        callManager.startCall(selectedUserForModal);
+        if (selectedUserForModal.id === currentUser.id) {
+          callManager.startSelfTest();
+        } else {
+          callManager.startCall(selectedUserForModal);
+        }
         targetModal.style.display = 'none';
       }
     });
@@ -494,7 +531,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           <button class="btn btn-secondary btn-icon btn-sm btn-fly" title="Fly to user on Globe">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="12 8 8 12 12 16 12 8"/></svg>
           </button>
-          ${!isMe ? `
+          ${isMe ? `
+            <button class="btn btn-secondary btn-icon btn-sm btn-self-test" title="Test Camera & Call">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            </button>
+          ` : `
             ${isMaleFemale ? `
               <button class="btn btn-love btn-icon btn-sm btn-card-love" title="Shoot Cupid Love Arrow">
                 💘
@@ -506,7 +547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <button class="btn btn-video btn-icon btn-sm btn-call" title="Start Video Call">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
             </button>
-          ` : ''}
+          `}
         </div>
       `;
 
@@ -517,6 +558,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           e.stopPropagation();
           globeManager.focusUser(user, 16.5);
           openTargetModal(user);
+        });
+      }
+
+      const btnSelfTest = card.querySelector('.btn-self-test');
+      if (btnSelfTest) {
+        btnSelfTest.addEventListener('click', (e) => {
+          e.stopPropagation();
+          callManager.startSelfTest();
         });
       }
 
@@ -560,31 +609,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     userSearchInput.addEventListener('input', () => renderUsersList());
   }
 
-  // 13. Render Active 3D Links in Sidebar
+  // 13. Render Active Video Calls in Sidebar
   function renderLinksList() {
     linkListContainer.innerHTML = '';
     if (activeLinksList.length === 0) {
-      linkListContainer.innerHTML = '<div style="color:var(--text-muted); font-size:12px; text-align:center; padding:20px 0;">No active globe connection arcs</div>';
+      linkListContainer.innerHTML = '<div style="color:var(--text-muted); font-size:12px; text-align:center; padding:20px 0;">No active video calls on Earth</div>';
       return;
     }
 
     activeLinksList.forEach(link => {
       const card = document.createElement('div');
       card.className = 'link-card';
-      const isVideo = link.type === 'VIDEO';
-      const isLove = link.isLoveLink || link.loveLink;
-      const linkColor = link.color || (window.getLinkColor ? window.getLinkColor(link) : (isVideo ? '#a855f7' : '#00f0ff'));
 
       card.innerHTML = `
         <div class="link-header">
-          <span class="link-badge" style="background: ${linkColor}22; color: ${linkColor}; border: 1px solid ${linkColor}66;">
-            ● ${isLove ? '💘 LOVE' : link.type} ${isLove ? 'CHANNEL' : 'ARC'}
+          <span class="link-badge" style="background: rgba(0, 240, 255, 0.15); color: #00f0ff; border: 1px solid rgba(0, 240, 255, 0.4);">
+            ● LIVE VIDEO CALL
           </span>
-          <span style="font-family:var(--font-mono); font-size:10px; color:${linkColor}; font-weight:600;">Active Link</span>
+          <span style="font-family:var(--font-mono); font-size:10px; color:#10b981; font-weight:600;">ACTIVE STREAM</span>
         </div>
         <div class="link-peers">
           <span>${link.user1Name}</span>
-          <span style="color:${linkColor}; font-weight:800; font-size:14px;">${isLove ? '🏹' : '⟷'}</span>
+          <span style="color:#00f0ff; font-weight:800; font-size:14px;">📹⟷📹</span>
           <span>${link.user2Name}</span>
         </div>
       `;

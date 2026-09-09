@@ -739,6 +739,7 @@ class GlobeManager {
 
   /**
    * Update 3D geodesic curved connection arcs
+   * RULE: Only show lines when users are having an active videocall!
    */
   updateLinks(linkList) {
     this.links = linkList || [];
@@ -750,24 +751,23 @@ class GlobeManager {
 
     const features = [];
 
-    this.links.forEach(link => {
-      try {
-        if (link.isLoveLink || link.loveLink || link.type === 'LOVE') {
-          // Trigger love animation globally if not already played
-          this.triggerLoveAnimationForLink(link);
-        }
+    // STRICT: Only draw lines/arcs on the globe when users are in an active VIDEOCALL!
+    // No lines for regular chat, and no lines for Cupid love signals.
+    const videoLinks = (this.links || []).filter(link => link && link.type === 'VIDEO');
 
+    videoLinks.forEach(link => {
+      try {
         const start = [link.user1Lng, link.user1Lat];
         const end = [link.user2Lng, link.user2Lat];
+        const arcColor = '#00f0ff'; // Bright cyan laser beam for active video call
 
-        const arcColor = (link.isLoveLink || link.loveLink || link.type === 'LOVE') ? '#ff007f' : getLinkColor(link);
         // Generate geodesic Great Circle line with Turf.js
         if (window.turf && window.turf.greatCircle) {
           const arc = window.turf.greatCircle(start, end, {
             npoints: 100,
             properties: {
               color: arcColor,
-              type: link.type || (link.isLoveLink ? 'LOVE' : 'CHAT')
+              type: 'VIDEO'
             }
           });
           features.push(arc);
@@ -781,12 +781,12 @@ class GlobeManager {
             },
             properties: {
               color: arcColor,
-              type: link.type || (link.isLoveLink ? 'LOVE' : 'CHAT')
+              type: 'VIDEO'
             }
           });
         }
       } catch (e) {
-        console.warn('Could not generate arc for link:', link, e);
+        console.warn('Could not generate video call arc for link:', link, e);
       }
     });
 
@@ -802,34 +802,138 @@ class GlobeManager {
   }
 
   /**
-   * Trigger love animation for a link
+   * Dynamic 3D Flying Letter Animation between users when sending or receiving messages
+   * A winged cosmic envelope with glowing halo & sparkle trail glides smoothly
+   * along the geodesic Great Circle curve from sender to recipient!
    */
-  triggerLoveAnimationForLink(link) {
-    if (!this.playedLoveLinks) this.playedLoveLinks = new Set();
-    if (this.playedLoveLinks.has(link.id)) return;
-    this.playedLoveLinks.add(link.id);
+  triggerLetterAnimation(senderUser, targetUser, data = {}) {
+    if (!this.map || !senderUser || !targetUser) return;
 
-    const user1 = (this.users || []).find(u => u.id === link.user1Id) || {
-      id: link.user1Id,
-      name: link.user1Name,
-      lat: link.user1Lat,
-      lng: link.user1Lng,
-      gender: link.user1Gender || 'MALE'
-    };
+    let fromLng = senderUser.lng;
+    while (fromLng < -180) fromLng += 360;
+    while (fromLng > 180) fromLng -= 360;
 
-    const user2 = (this.users || []).find(u => u.id === link.user2Id) || {
-      id: link.user2Id,
-      name: link.user2Name,
-      lat: link.user2Lat,
-      lng: link.user2Lng,
-      gender: link.user2Gender || 'FEMALE'
-    };
+    let toLng = targetUser.lng;
+    while (toLng < -180) toLng += 360;
+    while (toLng > 180) toLng -= 360;
 
-    const u1Gender = (user1.gender || 'MALE').toUpperCase();
-    const u2Gender = (user2.gender || 'FEMALE').toUpperCase();
-    if ((u1Gender === 'MALE' && u2Gender === 'FEMALE') || (u1Gender === 'FEMALE' && u2Gender === 'MALE')) {
-      this.triggerLoveAnimation(user1, user2);
+    // 1. Calculate Geodesic Flight Path from Sender to Target
+    let arcPoints = [[fromLng, senderUser.lat], [toLng, targetUser.lat]];
+    if (window.turf && window.turf.greatCircle) {
+      try {
+        const gc = window.turf.greatCircle([fromLng, senderUser.lat], [toLng, targetUser.lat], { npoints: 60 });
+        if (gc && gc.geometry && gc.geometry.coordinates) {
+          arcPoints = gc.geometry.coordinates;
+        }
+      } catch (e) {
+        console.warn('Great circle flight calculation fallback for letter:', e);
+      }
     }
+
+    // 2. Spawn Animated Flying Letter Marker at start of path
+    const letterEl = document.createElement('div');
+    letterEl.className = 'cosmic-letter-flight-marker';
+    letterEl.innerHTML = `
+      <div class="letter-envelope-wrap">
+        <div class="letter-glow-halo"></div>
+        <div class="letter-wings-left">🪽</div>
+        <svg class="letter-svg-body" viewBox="0 0 44 32" fill="none">
+          <rect x="2" y="2" width="40" height="28" rx="4" fill="#0c1a30" stroke="#00f0ff" stroke-width="2"/>
+          <polyline points="3,3 22,18 41,3" stroke="#00f0ff" stroke-width="2" stroke-linejoin="round"/>
+          <polyline points="3,29 15,16" stroke="rgba(0, 240, 255, 0.4)" stroke-width="1.5"/>
+          <polyline points="41,29 29,16" stroke="rgba(0, 240, 255, 0.4)" stroke-width="1.5"/>
+          <circle cx="22" cy="18" r="3.5" fill="#ff007f" filter="drop-shadow(0 0 4px #ff007f)"/>
+        </svg>
+        <div class="letter-wings-right">🪽</div>
+        <div class="letter-sparkle-trail">✨</div>
+      </div>
+    `;
+
+    const letterMarker = new maplibregl.Marker({
+      element: letterEl,
+      anchor: 'center'
+    })
+    .setLngLat(arcPoints[0])
+    .addTo(this.map);
+
+    // 3. Animate Letter along Geodesic Path
+    const totalPoints = arcPoints.length;
+    const durationMs = 2400; // 2.4s smooth flight
+    const startTime = performance.now();
+
+    const animateLetter = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+
+      // Ease in-out cubic
+      const ease = progress < 0.5 
+        ? 4 * progress * progress * progress 
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+      const currentIndex = Math.min(Math.floor(ease * (totalPoints - 1)), totalPoints - 1);
+      const currentPoint = arcPoints[currentIndex];
+
+      if (currentPoint) {
+        letterMarker.setLngLat(currentPoint);
+
+        // Orient envelope along flight trajectory
+        if (currentIndex < totalPoints - 1) {
+          const nextPoint = arcPoints[currentIndex + 1];
+          const p1 = this.map.project(currentPoint);
+          const p2 = this.map.project(nextPoint);
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          if (Math.hypot(dx, dy) > 0.5) {
+            const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+            const wrap = letterEl.querySelector('.letter-envelope-wrap');
+            if (wrap) wrap.style.transform = `rotate(${angleDeg}deg)`;
+          }
+        }
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(animateLetter);
+      } else {
+        // Letter arrived at Target destination!
+        letterMarker.remove();
+        this.spawnLetterDeliveredReaction(targetUser, senderUser);
+      }
+    };
+
+    requestAnimationFrame(animateLetter);
+  }
+
+  /**
+   * Spawn Delivered Sparkle Reaction over Target Pin when Letter arrives
+   */
+  spawnLetterDeliveredReaction(targetUser, senderUser) {
+    if (!this.map || !targetUser) return;
+
+    let toLng = targetUser.lng;
+    while (toLng < -180) toLng += 360;
+    while (toLng > 180) toLng -= 360;
+
+    const burstEl = document.createElement('div');
+    burstEl.className = 'letter-delivered-popup';
+    burstEl.innerHTML = `
+      <div class="letter-delivered-ripple"></div>
+      <div class="letter-delivered-box">
+        <span class="del-icon">📬</span>
+        <span class="del-text">Message Delivered to ${targetUser.name}! ✨</span>
+      </div>
+    `;
+
+    const burstMarker = new maplibregl.Marker({
+      element: burstEl,
+      anchor: 'bottom',
+      offset: [0, -40]
+    })
+    .setLngLat([toLng, targetUser.lat])
+    .addTo(this.map);
+
+    setTimeout(() => {
+      burstMarker.remove();
+    }, 2600);
   }
 
   /**

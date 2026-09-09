@@ -15,31 +15,7 @@ public class UserManager {
     private final Map<String, ConnectionLink> activeLinks = new ConcurrentHashMap<>();
 
     public UserManager() {
-        initSeedOrbiters();
-    }
-
-    private void initSeedOrbiters() {
-        User sakura = new User("user_sakura", "Sakura Tanaka", 23, "FEMALE", 35.6762, 139.6503, "Tokyo", "Japan", "https://api.dicebear.com/7.x/bottts/svg?seed=SakuraTanaka");
-        usersById.put(sakura.getId(), sakura);
-
-        User apollo = new User("user_apollo", "Apollo Vance", 26, "MALE", 51.5074, -0.1278, "London", "United Kingdom", "https://api.dicebear.com/7.x/bottts/svg?seed=ApolloVance");
-        usersById.put(apollo.getId(), apollo);
-
-        User elena = new User("user_elena", "Elena Rostova", 24, "FEMALE", 48.8566, 2.3522, "Paris", "France", "https://api.dicebear.com/7.x/bottts/svg?seed=ElenaRostova");
-        usersById.put(elena.getId(), elena);
-
-        User carlos = new User("user_carlos", "Carlos Mendez", 27, "MALE", -22.9068, -43.1729, "Rio de Janeiro", "Brazil", "https://api.dicebear.com/7.x/bottts/svg?seed=CarlosMendez");
-        usersById.put(carlos.getId(), carlos);
-
-        User liam = new User("user_liam", "Liam O'Connor", 25, "MALE", -33.8688, 151.2093, "Sydney", "Australia", "https://api.dicebear.com/7.x/bottts/svg?seed=LiamOConnor");
-        usersById.put(liam.getId(), liam);
-
-        User amina = new User("user_amina", "Amina Al-Mansoor", 22, "FEMALE", 25.2048, 55.2708, "Dubai", "United Arab Emirates", "https://api.dicebear.com/7.x/bottts/svg?seed=AminaAlMansoor");
-        usersById.put(amina.getId(), amina);
-
-        // Initial live connection between London and Paris
-        ConnectionLink seedLink = new ConnectionLink(apollo, elena, "CHAT");
-        activeLinks.put(seedLink.getId(), seedLink);
+        // Production mode: No dummy/seed data. Only real active users and links are maintained.
     }
 
     public User registerUser(User user, String sessionId) {
@@ -160,7 +136,7 @@ public class UserManager {
 
     public User removeBySessionId(String sessionId) {
         String userId = sessionToUserId.remove(sessionId);
-        if (userId != null && !userId.startsWith("user_")) {
+        if (userId != null) {
             removeUserLinks(userId);
             return usersById.remove(userId);
         }
@@ -169,7 +145,6 @@ public class UserManager {
 
     public User removeUser(String userId) {
         if (userId == null) return null;
-        if (userId.startsWith("user_")) return null; // Preserve seed orbiters
         removeUserLinks(userId);
         User user = usersById.remove(userId);
         if (user != null && user.getSessionId() != null) {
@@ -179,29 +154,25 @@ public class UserManager {
     }
 
     public ConnectionLink createLink(String user1Id, String user2Id, String type) {
+        // Only show lines on the 3D globe when users are having an active videocall
+        if (!"VIDEO".equalsIgnoreCase(type)) {
+            return null;
+        }
         User u1 = usersById.get(user1Id);
         User u2 = usersById.get(user2Id);
         if (u1 == null || u2 == null) {
             return null;
         }
 
-        ConnectionLink link = new ConnectionLink(u1, u2, type);
-        if ("LOVE".equalsIgnoreCase(type)) {
-            link.setLoveLink(true);
-            link.setColor("#ff007f");
-        }
+        ConnectionLink link = new ConnectionLink(u1, u2, "VIDEO");
+        link.setColor("#00f0ff");
         activeLinks.put(link.getId(), link);
 
-        // Update users state
-        if ("VIDEO".equalsIgnoreCase(type)) {
-            u1.setStatus("IN_CALL");
-            u2.setStatus("IN_CALL");
-            u1.setConnectedToId(u2.getId());
-            u2.setConnectedToId(u1.getId());
-        } else if ("CHAT".equalsIgnoreCase(type)) {
-            if (!"IN_CALL".equals(u1.getStatus())) u1.setStatus("CHATTING");
-            if (!"IN_CALL".equals(u2.getStatus())) u2.setStatus("CHATTING");
-        }
+        // Update users state to IN_CALL
+        u1.setStatus("IN_CALL");
+        u2.setStatus("IN_CALL");
+        u1.setConnectedToId(u2.getId());
+        u2.setConnectedToId(u1.getId());
 
         return link;
     }
